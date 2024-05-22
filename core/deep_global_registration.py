@@ -155,7 +155,7 @@ class DeepGlobalRegistration:
     xyz = torch.from_numpy(xyz[sel]).to(self.device)
 
     # ME standard batch coordinates
-    coords = ME.utils.batched_coordinates([torch.floor(xyz / self.voxel_size).int()], device=self.device)
+    coords = ME.utils.batched_coordinates([torch.floor(xyz / self.voxel_size)], device=self.device)
     feats = torch.ones(npts, 1)
 
     return xyz.float(), coords, feats
@@ -273,31 +273,32 @@ class DeepGlobalRegistration:
 
     # Step 5: Registration. Note: torch's gradient may be required at this stage
     # > Case 0: Weighted Procrustes + Robust Refinement
-    wsum_threshold = max(200, len(weights) * 0.05)
+    # wsum_threshold = max(200, len(weights) * 0.05)
+    wsum_threshold = 0
     sign = '>=' if wsum >= wsum_threshold else '<'
     print(f'=> Weighted sum {wsum:.2f} {sign} threshold {wsum_threshold}')
 
     T = np.identity(4)
     if wsum >= wsum_threshold:
-      try:
-        rot, trans, opt_output = GlobalRegistration(xyz0[corres_idx0],
-                                                    xyz1[corres_idx1],
-                                                    weights=weights.detach(),
-                                                    break_threshold_ratio=1e-4,
-                                                    quantization_size=2 *
-                                                    self.voxel_size,
-                                                    verbose=False)
-        T[0:3, 0:3] = rot.detach().cpu().numpy()
-        T[0:3, 3] = trans.detach().cpu().numpy()
-        dgr_time = self.reg_timer.toc()
-        print(f'=> DGR takes {dgr_time:.2} s')
+      # try:
+      rot, trans, opt_output = GlobalRegistration(xyz0[corres_idx0],
+                                                  xyz1[corres_idx1],
+                                                  weights=weights.detach(),
+                                                  break_threshold_ratio=1e-4,
+                                                  quantization_size=2 *
+                                                  self.voxel_size,
+                                                  verbose=False)
+      T[0:3, 0:3] = rot.detach().cpu().numpy()
+      T[0:3, 3] = trans.detach().cpu().numpy()
+      dgr_time = self.reg_timer.toc()
+      print(f'=> DGR takes {dgr_time:.2} s')
 
-      except RuntimeError:
-        # Will directly go to Safeguard
-        print('###############################################')
-        print('# WARNING: SVD failed, weights sum: ', wsum)
-        print('# Falling back to Safeguard')
-        print('###############################################')
+      # except RuntimeError:
+      #   # Will directly go to Safeguard
+      #   print('###############################################')
+      #   print('# WARNING: SVD failed, weights sum: ', wsum)
+      #   print('# Falling back to Safeguard')
+      #   print('###############################################')
 
     else:
       # > Case 1: Safeguard RANSAC + (Optional) ICP
